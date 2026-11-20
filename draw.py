@@ -13,6 +13,16 @@ $120bn is the aid goal being cut; DATE CHECK box height now computed from
 the wrapped lines so no border crosses the NOT YET line; the three
 interpretive deck extras cut (the Ukraine caveat, the "first state"
 claim, the day-one share-rise claim). Nothing else changed.
+REV4 (surgical, judge-sim round 4 — hard stop 23:30 WIB 20 Nov): (1) tag
+inset +6px so REPORTED never touches a panel divider; (2) LEFT OUT
+"Anthropic IPO pricing" reworded to "Anthropic's $83 IPO price (set 18 Nov)"
+so it no longer reads contradictory vs story 9; (3) Riyadh interceptor
+arcs clipped to the scene box (their bboxes poked above the scene and
+crossed the legend strip near CLAIM); (4) stat strip slimmed 52->44px and
+lightened, legend ink (not grey), paper grain halved — page reads lighter
+at 300px; (5) CLAIM/FORECAST tags genuinely used (card 4 Kerch = Kyiv's
+claim, card 6 cyclone = forecast landfall) so the legend framework is real;
+(6) map taller (148->156) with bigger pins, brief type 10->11.
 Deterministic: no timestamps, no network, seeded texture only.
 """
 import os
@@ -34,19 +44,26 @@ SKIN2 = (232, 184, 138)
 SHADOW = (208, 198, 176)
 
 FD = "/usr/share/fonts/truetype/dejavu"
+FN = "/usr/share/fonts/truetype/noto"
 
 
 def F(name, size):
     return ImageFont.truetype(os.path.join(FD, name), size)
 
 
+def FI(name, size):
+    # REV4: DejaVuSerif-Italic.ttf is missing from this VM (deleted);
+    # Noto Serif Italic is the closest available substitute.
+    return ImageFont.truetype(os.path.join(FN, name), size)
+
+
 SERIF_B = lambda s: F("DejaVuSerif-Bold.ttf", s)
 SERIF = lambda s: F("DejaVuSerif.ttf", s)
-SERIF_I = lambda s: F("DejaVuSerif-Italic.ttf", s)
+SERIF_I = lambda s: FI("NotoSerif-Italic.ttf", s)
 SANS_B = lambda s: F("DejaVuSans-Bold.ttf", s)
 SANS = lambda s: F("DejaVuSans.ttf", s)
-SANSC_B = lambda s: F("DejaVuSansCondensed-Bold.ttf", s)
-SANSC = lambda s: F("DejaVuSansCondensed.ttf", s)
+SANSC_B = lambda s: FI("NotoSans-CondensedBold.ttf", s)
+SANSC = lambda s: FI("NotoSans-Condensed.ttf", s)
 
 
 def lerp(a, b, t):
@@ -80,10 +97,10 @@ def paper_texture(img):
     """Very subtle deterministic paper grain on the cream base."""
     d = ImageDraw.Draw(img, "RGBA")
     rng = random.Random(20261119)
-    for _ in range(2600):
+    for _ in range(1200):
         x = rng.randint(10, W - 10)
         y = rng.randint(10, H - 10)
-        c = (238, 230, 208, 26) if rng.random() < 0.5 else (255, 250, 238, 26)
+        c = (238, 230, 208, 16) if rng.random() < 0.5 else (255, 250, 238, 16)
         d.point((x, y), fill=c)
     return d
 
@@ -242,12 +259,12 @@ def draw_map(d, x0, y0, w, h):
         if (dx, dy) != (0, 0):
             d.line([x, y, x + dx, y + dy], fill=INK, width=1)
             x, y = x + dx, y + dy
-        r = 8
+        r = 9
         d.ellipse([x - r + 1, y - r + 1, x + r + 1, y + r + 1],
                   fill=(120, 110, 95))
         d.ellipse([x - r, y - r, x + r, y + r], fill=BRICK, outline=INK,
                   width=1)
-        d.text((x, y), str(n), font=SANS_B(9), fill=(255, 255, 255),
+        d.text((x, y), str(n), font=SANS_B(10), fill=(255, 255, 255),
                anchor="mm")
 
 # ---------------------------------------------------------------- scenes
@@ -663,13 +680,16 @@ def scene_riyadh(d, x, y, w, h):
               fill=(10, 14, 26), outline=(60, 70, 100))
     d.ellipse([x + 122, y + 0, x + 126, y + 4], fill=(255, 80, 80))
     # interceptor trails (glow: thick pale + thin bright) + bursts
-    d.arc([x + 20, y - 34, x + 140, y + 56], 300, 30, fill=(200, 200, 220),
+    # REV4: bbox tops clamped to the scene (y, not y-34/y-20) — the old
+    # bboxes let the arcs escape above the scene and cross the legend
+    # strip near CLAIM.
+    d.arc([x + 20, y, x + 140, y + 56], 300, 30, fill=(200, 200, 220),
           width=4)
-    d.arc([x + 20, y - 34, x + 140, y + 56], 300, 30, fill=(255, 255, 255),
+    d.arc([x + 20, y, x + 140, y + 56], 300, 30, fill=(255, 255, 255),
           width=2)
-    d.arc([x + 60, y - 20, x + 190, y + 60], 300, 45, fill=(255, 200, 80),
+    d.arc([x + 60, y, x + 190, y + 60], 300, 45, fill=(255, 200, 80),
           width=4)
-    d.arc([x + 60, y - 20, x + 190, y + 60], 300, 45, fill=(255, 220, 100),
+    d.arc([x + 60, y, x + 190, y + 60], 300, 45, fill=(255, 220, 100),
           width=2)
     burst(d, x + 138, y + 12, 9, (255, 220, 100))
     burst(d, x + 138, y + 12, 4, (255, 255, 255))
@@ -1049,16 +1069,16 @@ HEROES = [
 CARDS = [
     dict(n=4, place="CRIMEA", topic="WAR",
          head="Ukraine strikes Crimea bridge again",
-         deck="A third strike in a week stops trains to Russia.",
-         src="Euronews", tag="REPORTED", scene=scene_kerch),
+         deck="Kyiv says a third strike in a week stopped trains to Russia.",
+         src="Euronews", tag="CLAIM", scene=scene_kerch),
     dict(n=5, place="RIYADH", topic="WAR",
          head="Saudis shoot down Houthi missiles",
          deck="Debris fell on the capital; no casualties reported.",
          src="Reuters", tag="REPORTED", scene=scene_riyadh),
     dict(n=6, place="ODISHA", topic="STORM",
          head="Cyclone Akvan nears India\u2019s coast",
-         deck="Over 100,000 in shelters before Friday\u2019s landfall.",
-         src="IMD", tag="REPORTED", scene=scene_cyclone),
+         deck="Landfall forecast for Friday; over 100,000 already in shelters.",
+         src="IMD", tag="FORECAST", scene=scene_cyclone),
     dict(n=7, place="SEOUL", topic="JUSTICE",
          head="Korea\u2019s top court clears ex-PM Han",
          deck="Han Duck-soo\u2019s martial law conviction is overturned.",
@@ -1133,7 +1153,7 @@ LEFT_OUT = ("EU\u2019s \u20ac45bn Ukraine loan plan \u00b7 Iran fires on "
             "Kuwait and Bahrain \u00b7 Nvidia results \u00b7 Jeffries named "
             "for US speaker \u00b7 Carney on China ties \u00b7 Van Gogh "
             "$190.4m sale \u00b7 Voyager 1 one light-day \u00b7 Pew 2035 \u00b7 "
-            "Anthropic IPO pricing ($83) \u00b7 Gaza push began")
+            "Anthropic\u2019s $83 IPO price (set 18 Nov) \u00b7 Gaza push began")
 NOT_YET = "COP31\u2019s scheduled close \u00b7 Cyclone Akvan\u2019s landfall"
 
 SUBHEAD = ("Trump, Xi and Putin share one table \u00b7 The World Court "
@@ -1163,7 +1183,7 @@ def hero_panel(d, x, y, w, h, item):
     d.text((x + 2, y + h - 12), "\u2014 " + item["src"], font=SANS(10),
            fill=GREY)
     tw = SANS_B(10).getlength(item["tag"])
-    d.text((x + w - 2 - tw, y + h - 12), item["tag"], font=SANS_B(10),
+    d.text((x + w - 8 - tw, y + h - 12), item["tag"], font=SANS_B(10),
            fill=BRICK)
     d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
 
@@ -1184,7 +1204,7 @@ def card_panel(d, x, y, w, h, item):
     d.text((x + 2, y + h - 11), "\u2014 " + item["src"], font=SANS(8),
            fill=GREY)
     tw = SANS_B(8).getlength(item["tag"])
-    d.text((x + w - 2 - tw, y + h - 11), item["tag"], font=SANS_B(8),
+    d.text((x + w - 8 - tw, y + h - 11), item["tag"], font=SANS_B(8),
            fill=BRICK)
     d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
 
@@ -1214,29 +1234,30 @@ def draw():
     d.text((x0, 86), SUBHEAD, font=SERIF_I(fs), fill=BRICK)
     d.line([x0, 106, x1, 106], fill=INK, width=2)
 
-    # number strip: 6 navy blocks
+    # number strip: 6 navy blocks, slimmed REV4 (52 -> 44px) so the page
+    # breathes more at 300px
     y = 112
     bw, gap = 164, 4
     for i, (num, label) in enumerate(NUMBERS):
         bx = x0 + i * (bw + gap)
-        d.rectangle([bx + 2, y + 2, bx + bw + 2, y + 54], fill=SHADOW)
-        vgrad(d, bx, y, bx + bw, y + 52, (38, 66, 118), (24, 44, 82))
-        d.rectangle([bx, y, bx + bw, y + 52], outline=INK, width=1)
-        nf = SANS_B(26)
+        d.rectangle([bx + 2, y + 2, bx + bw + 2, y + 46], fill=SHADOW)
+        vgrad(d, bx, y, bx + bw, y + 44, (48, 78, 132), (30, 54, 96))
+        d.rectangle([bx, y, bx + bw, y + 44], outline=INK, width=1)
+        nf = SANS_B(22)
         while nf.getlength(num) > bw - 10:
             nf = SANS_B(nf.size - 1)
-        d.text((bx + bw / 2, y + 6), num, font=nf, fill=(255, 255, 255),
+        d.text((bx + bw / 2, y + 4), num, font=nf, fill=(255, 255, 255),
                anchor="ma")
-        lf = SANS(10)
+        lf = SANS(9)
         lines = wrap(label, lf, bw - 8)
-        ly = y + 36
+        ly = y + 29
         for ln in lines[:2]:
             d.text((bx + bw / 2, ly), ln, font=lf, fill=(255, 255, 255),
                    anchor="ma")
-            ly += 11
+            ly += 10
 
     # region strip: 7 chips
-    y = 170
+    y = 164
     cx = x0
     for label, col in REGIONS:
         fnt = SANS_B(11)
@@ -1248,20 +1269,20 @@ def draw():
         cx += wch + 5
 
     # hero: 3 panels
-    y = 196
+    y = 190
     hw, hgap = 330, 7
     for i, item in enumerate(HEROES):
         hero_panel(d, x0 + i * (hw + hgap), y, hw, 248, item)
 
-    # tag legend: one compact line
-    y = 450
+    # tag legend: one compact line, ink (not grey) REV4 so it reads at 300px
+    y = 444
     legend = ("HOW SURE ARE WE? \u2014 REPORTED: confirmed by multiple "
               "sources \u00b7 CLAIM: one side\u2019s claim \u00b7 FORECAST: "
               "projection, not yet fact")
-    d.text((x0, y), legend, font=SANS(10), fill=GREY)
+    d.text((x0, y), legend, font=SANS(10), fill=INK)
 
     # secondary grid: 2 rows x 5
-    y = 466
+    y = 460
     kw, kgap = 196, 6
     kh = 132
     for r in range(2):
@@ -1271,36 +1292,36 @@ def draw():
                        item)
 
     # bottom band: briefs left, map right
-    y = 742
+    y = 736
     d.text((x0, y), "ALSO ON THURSDAY 19 NOVEMBER 2026", font=SANS_B(12),
            fill=INK)
     d.text((x1, y), "WHERE IT HAPPENED", font=SANS_B(12), fill=INK,
            anchor="ra")
     d.line([x0, y + 16, x1, y + 16], fill=INK, width=1)
     by = y + 22
-    # briefs: 2 columns x 10 rows
+    # briefs: 2 columns x 10 rows, type bumped 10 -> 11 REV4
     col_w = 300
     for i, (n, place, text, src) in enumerate(BRIEFS):
         col = i // 10
         row = i % 10
         bx = x0 + col * (col_w + 4)
         ry = by + row * 16
-        d.text((bx, ry), str(n), font=SANS_B(10), fill=BRICK)
-        nw = SANS_B(10).getlength(str(n)) + 3
+        d.text((bx, ry), str(n), font=SANS_B(11), fill=BRICK)
+        nw = SANS_B(11).getlength(str(n)) + 3
         full = place + " \u2014 " + text + " " + src + "."
-        fnt = SANSC(10)
+        fnt = SANSC(11)
         # place bold: draw place in bold condensed, rest regular
-        d.text((bx + nw, ry), place, font=SANSC_B(10), fill=INK)
-        pw = SANSC_B(10).getlength(place)
+        d.text((bx + nw, ry), place, font=SANSC_B(11), fill=INK)
+        pw = SANSC_B(11).getlength(place)
         rest = " \u2014 " + text + " " + src + "."
         while fnt.getlength(rest) > col_w - nw - pw - 2 and fnt.size > 8:
             fnt = SANSC(fnt.size - 1)
         d.text((bx + nw + pw, ry), rest, font=fnt, fill=INK)
-    # map right
+    # map right, taller REV4 (148 -> 156)
     mx = x0 + 2 * (col_w + 4) + 6
     mw = x1 - mx
-    draw_map(d, mx, by, mw, 148)
-    d.text((mx, by + 152), "numbers match the stories \u00b7 dots: briefs",
+    draw_map(d, mx, by, mw, 156)
+    d.text((mx, by + 160), "numbers match the stories \u00b7 dots: briefs",
            font=SANS(8), fill=GREY)
 
     # DATE CHECK: compact — one bold claim line + wrapped lists.
