@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Draw entry.png for news-image-20261119, agent 3, 2/3 ("The Ledger").
 
-Flat-vector front page, 1024x1024, drawn entirely in code with PIL + DejaVu.
-Deterministic: no timestamps, no randomness, no network.
+REV2 (craft overhaul): flat-vector base kept, but every scene now carries
+depth — vertical sky gradients, panel drop shadows, shaded faces with
+distinct features per leader, shaded suits, brick coursing, a true cyclone
+spiral, terrain map, paper texture. Denmark flag fixed (red + white cross).
+Kerch chip moved off the bridge arc. DATE CHECK compacted to free space
+for bigger headlines. Drawn entirely in code with PIL + DejaVu.
+Deterministic: no timestamps, no network, seeded texture only.
 """
 import os
+import random
 from PIL import Image, ImageDraw, ImageFont
 
 W, H = 1024, 1024
@@ -19,6 +25,7 @@ GREY = (90, 86, 76)
 LIGHT_LINE = (200, 190, 165)
 SKIN = (242, 200, 155)
 SKIN2 = (232, 184, 138)
+SHADOW = (208, 198, 176)
 
 FD = "/usr/share/fonts/truetype/dejavu"
 
@@ -34,6 +41,45 @@ SANS_B = lambda s: F("DejaVuSans-Bold.ttf", s)
 SANS = lambda s: F("DejaVuSans.ttf", s)
 SANSC_B = lambda s: F("DejaVuSansCondensed-Bold.ttf", s)
 SANSC = lambda s: F("DejaVuSansCondensed.ttf", s)
+
+
+def lerp(a, b, t):
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+
+
+def shade(color, f):
+    """Darken (f<1) or lighten (f>1) a color."""
+    return tuple(max(0, min(255, int(c * f))) for c in color)
+
+
+def vgrad(d, x0, y0, x1, y1, top, bottom):
+    """Vertical gradient: top color at y0, bottom color at y1."""
+    h = max(1, y1 - y0)
+    for yy in range(y0, y1):
+        d.line([x0, yy, x1, yy], fill=lerp(top, bottom, (yy - y0) / h))
+
+
+def hgrad(d, x0, y0, x1, y1, left, right):
+    """Horizontal gradient: left color at x0, right color at x1."""
+    w = max(1, x1 - x0)
+    for xx in range(x0, x1):
+        d.line([xx, y0, xx, y1], fill=lerp(left, right, (xx - x0) / w))
+
+
+def panel_shadow(d, x, y, w, h, off=3):
+    d.rectangle([x + off, y + off, x + w + off, y + h + off], fill=SHADOW)
+
+
+def paper_texture(img):
+    """Very subtle deterministic paper grain on the cream base."""
+    d = ImageDraw.Draw(img, "RGBA")
+    rng = random.Random(20261119)
+    for _ in range(2600):
+        x = rng.randint(10, W - 10)
+        y = rng.randint(10, H - 10)
+        c = (238, 230, 208, 26) if rng.random() < 0.5 else (255, 250, 238, 26)
+        d.point((x, y), fill=c)
+    return d
 
 
 def wrap(text, font, max_w):
@@ -161,14 +207,29 @@ PIN_OFFSETS = {2: (12, 0), 3: (-14, 10), 4: (14, -10), 5: (12, 8)}
 
 
 def draw_map(d, x0, y0, w, h):
-    d.rectangle([x0, y0, x0 + w, y0 + h], fill=(216, 226, 234),
-                outline=INK, width=1)
+    # ocean: pale blue gradient + faint graticule + wave dashes
+    vgrad(d, x0, y0, x0 + w, y0 + h, (222, 231, 240), (206, 221, 235))
+    for lon in range(-150, 181, 30):
+        x, _ = project(lon, 0, x0, y0, w, h)
+        d.line([x, y0, x, y0 + h], fill=(190, 205, 220), width=1)
+    for lat in (60, 30, 0, -30):
+        _, y = project(0, lat, x0, y0, w, h)
+        d.line([x0, y, x0 + w, y], fill=(190, 205, 220), width=1)
     for poly in CONTINENTS:
         pts = [project(lon, lat, x0, y0, w, h) for lon, lat in poly]
-        d.polygon(pts, fill=(214, 196, 150), outline=(120, 105, 70))
+        # darker land edge underneath = shaded relief
+        d.polygon([(px + 1, py + 1) for px, py in pts], fill=(190, 172, 128))
+        d.polygon(pts, fill=(218, 200, 154), outline=(120, 105, 70))
+    # faint interior tone patches (terrain feel, deterministic)
+    for lon, lat, rr in [(20, 5, 14), (100, 50, 16), (-100, 40, 15),
+                         (140, -25, 10), (-55, -10, 11)]:
+        x, y = project(lon, lat, x0, y0, w, h)
+        d.ellipse([x - rr, y - rr * 0.6, x + rr, y + rr * 0.6],
+                  fill=(206, 188, 142))
     for lon, lat in DOTS:
         x, y = project(lon, lat, x0, y0, w, h)
         d.ellipse([x - 2, y - 2, x + 2, y + 2], fill=GREY)
+    d.rectangle([x0, y0, x0 + w, y0 + h], outline=INK, width=1)
     for n, (lon, lat) in PINS.items():
         x, y = project(lon, lat, x0, y0, w, h)
         dx, dy = PIN_OFFSETS.get(n, (0, 0))
@@ -176,6 +237,8 @@ def draw_map(d, x0, y0, w, h):
             d.line([x, y, x + dx, y + dy], fill=INK, width=1)
             x, y = x + dx, y + dy
         r = 8
+        d.ellipse([x - r + 1, y - r + 1, x + r + 1, y + r + 1],
+                  fill=(120, 110, 95))
         d.ellipse([x - r, y - r, x + r, y + r], fill=BRICK, outline=INK,
                   width=1)
         d.text((x, y), str(n), font=SANS_B(9), fill=(255, 255, 255),
@@ -186,39 +249,91 @@ def scene_frame(d, x, y, w, h, bg):
     d.rectangle([x, y, x + w, y + h], fill=bg, outline=INK, width=1)
 
 
-def face(d, cx, cy, r, skin, hair, hair_style):
+def face(d, cx, cy, r, skin, hair, hair_style, mouth="smile", brow="flat"):
+    """A face with distinct features per person: hair shape, brows, nose,
+    mouth variant. Light comes from the left: right side of the face is
+    shaded one step darker."""
+    # face + right-side shade
     d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=skin, outline=INK,
               width=1)
-    if hair_style == "blond":
-        d.pieslice([cx - r, cy - r - 4, cx + r, cy + r - 6], 180, 360,
+    d.pieslice([cx - r, cy - r, cx + r, cy + r], -55, 55,
+               fill=shade(skin, 0.88))
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=INK, width=1)
+    # hair
+    if hair_style == "blond-swept":  # Trump: blond, swept to the side
+        d.pieslice([cx - r, cy - r - 5, cx + r, cy + r - 4], 180, 360,
                    fill=(240, 210, 90), outline=INK, width=1)
-        d.rectangle([cx - r, cy - r + 2, cx + r, cy - r + 7],
+        d.rectangle([cx - r, cy - r + 1, cx + r - 2, cy - r + 6],
                     fill=(240, 210, 90))
-    elif hair_style == "black":
+        d.polygon([(cx - r, cy - r + 2), (cx - 2, cy - r - 4),
+                   (cx + r, cy - r + 4)], fill=(240, 210, 90),
+                  outline=INK)
+    elif hair_style == "black-flat":  # Xi: black, flat side part
         d.pieslice([cx - r, cy - r - 3, cx + r, cy + r - 8], 180, 360,
                    fill=(20, 20, 20), outline=INK, width=1)
-    elif hair_style == "grey":
-        d.pieslice([cx - r, cy - r - 3, cx + r, cy + r - 8], 180, 360,
-                   fill=(200, 200, 200), outline=INK, width=1)
+        d.rectangle([cx - r, cy - r + 2, cx - r + 8, cy - r + 7],
+                    fill=(20, 20, 20))
+    elif hair_style == "grey-receding":  # Putin: grey, receding
+        d.pieslice([cx - r, cy - r - 2, cx + r, cy + r - 10], 180, 360,
+                   fill=(205, 205, 205), outline=INK, width=1)
+        d.arc([cx - r + 2, cy - r - 2, cx + r - 2, cy + r - 6], 200, 340,
+              fill=(150, 150, 150), width=1)
+    elif hair_style == "dark-curly":
+        for dx in (-8, -2, 4):
+            d.ellipse([cx + dx - 5, cy - r - 2, cx + dx + 5, cy - r + 6],
+                      fill=(40, 25, 10), outline=INK, width=1)
+    # ears
     d.ellipse([cx - r - 3, cy - 2, cx - r + 3, cy + 4], fill=skin,
               outline=INK, width=1)
     d.ellipse([cx + r - 3, cy - 2, cx + r + 3, cy + 4], fill=skin,
               outline=INK, width=1)
+    # brows
+    if brow == "flat":
+        d.line([cx - 9, cy - 7, cx - 3, cy - 7], fill=INK, width=2)
+        d.line([cx + 3, cy - 7, cx + 9, cy - 7], fill=INK, width=2)
+    elif brow == "frown":
+        d.line([cx - 9, cy - 5, cx - 3, cy - 8], fill=INK, width=2)
+        d.line([cx + 3, cy - 8, cx + 9, cy - 5], fill=INK, width=2)
+    elif brow == "raised":
+        d.arc([cx - 10, cy - 11, cx - 2, cy - 3], 180, 360, fill=INK, width=2)
+        d.arc([cx + 2, cy - 11, cx + 10, cy - 3], 180, 360, fill=INK, width=2)
+    # eyes + nose
     d.ellipse([cx - 8, cy - 3, cx - 5, cy + 0], fill=INK)
     d.ellipse([cx + 5, cy - 3, cx + 8, cy + 0], fill=INK)
-    d.arc([cx - 6, cy + 2, cx + 6, cy + 10], 10, 170, fill=INK, width=2)
+    d.line([cx + 1, cy - 1, cx, cy + 4], fill=shade(skin, 0.8), width=1)
+    # mouth
+    if mouth == "smile":
+        d.arc([cx - 6, cy + 2, cx + 6, cy + 10], 10, 170, fill=INK, width=2)
+    elif mouth == "frown":
+        d.arc([cx - 6, cy + 4, cx + 6, cy + 12], 190, 350, fill=INK, width=2)
+    else:
+        d.line([cx - 5, cy + 7, cx + 5, cy + 7], fill=INK, width=2)
 
 
-def figure(d, cx, base_y, suit, tie, skin, hair, hs):
-    # torso
+def figure(d, cx, base_y, suit, tie, skin, hair, hs, mouth="smile",
+           brow="flat"):
+    """Seated leader: shaded suit (light left, dark right), lapels, shirt,
+    tie with knot, distinct face."""
+    # torso with light/shade halves
     d.polygon([(cx - 26, base_y), (cx - 20, base_y - 42), (cx + 20, base_y - 42),
                (cx + 26, base_y)], fill=suit, outline=INK, width=1)
+    d.polygon([(cx, base_y), (cx + 20, base_y - 42), (cx + 26, base_y)],
+              fill=shade(suit, 0.78))
+    d.polygon([(cx - 26, base_y), (cx - 20, base_y - 42), (cx + 20, base_y - 42),
+               (cx + 26, base_y)], outline=INK, width=1)
+    # lapels
+    d.polygon([(cx - 8, base_y - 42), (cx, base_y - 30), (cx - 2, base_y - 20)],
+              fill=shade(suit, 1.18), outline=INK, width=1)
+    d.polygon([(cx + 8, base_y - 42), (cx, base_y - 30), (cx + 2, base_y - 20)],
+              fill=shade(suit, 1.18), outline=INK, width=1)
     # shirt + tie
     d.polygon([(cx - 7, base_y - 42), (cx + 7, base_y - 42), (cx, base_y - 26)],
               fill=(255, 255, 255), outline=INK, width=1)
+    d.polygon([(cx - 4, base_y - 40), (cx + 4, base_y - 40), (cx, base_y - 34)],
+              fill=tie)
     d.polygon([(cx - 3, base_y - 38), (cx + 3, base_y - 38), (cx + 4, base_y - 22),
                (cx, base_y - 18), (cx - 4, base_y - 22)], fill=tie)
-    face(d, cx, base_y - 58, 15, skin, hair, hs)
+    face(d, cx, base_y - 58, 15, skin, hair, hs, mouth=mouth, brow=brow)
 
 
 def flag_us(d, x, y, w, h):
@@ -247,6 +362,14 @@ def flag_ru(d, x, y, w, h):
     d.rectangle([x, y + 2 * h / 3, x + w, y + h], fill=(213, 0, 50))
 
 
+def flag_dk(d, x, y, w, h):
+    """Dannebrog: RED field, WHITE cross (off-centre, toward the hoist)."""
+    d.rectangle([x, y, x + w, y + h], fill=(200, 16, 46), outline=INK,
+                width=1)
+    d.rectangle([x, y + h * 0.42, x + w, y + h * 0.58], fill=(255, 255, 255))
+    d.rectangle([x + w * 0.28, y, x + w * 0.44, y + h], fill=(255, 255, 255))
+
+
 def burst(d, cx, cy, r, fill):
     import math
     pts = []
@@ -256,39 +379,43 @@ def burst(d, cx, cy, r, fill):
         pts.append((cx + rr * math.cos(ang), cy + rr * math.sin(ang)))
     d.polygon(pts, fill=fill, outline=INK, width=1)
 
-
 def scene_apec(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (188, 211, 232))
-    # summit hall: tall side windows + wall panels
-    for wx in (x + 8, x + w - 40):
-        d.rectangle([wx, y + 24, wx + 32, y + 92], fill=(214, 228, 240),
-                    outline=INK, width=1)
-        d.line([wx + 16, y + 24, wx + 16, y + 92], fill=INK, width=1)
-        d.line([wx, y + 56, wx + 32, y + 56], fill=INK, width=1)
-    d.line([x + 96, y + 24, x + 96, y + 92], fill=(150, 175, 200), width=2)
-    d.line([x + w - 96, y + 24, x + w - 96, y + 92], fill=(150, 175, 200),
-           width=2)
-    # gold banner: location left, summit right
-    d.rectangle([x, y, x + w, y + 20], fill=GOLD)
+    # hall: pale-blue wall gradient, darker at the floor
+    vgrad(d, x, y, x + w, y + h, (198, 218, 236), (168, 194, 220))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    # wall panels with gold trim + tall side windows with sky
+    for px in (x + 8, x + w - 40):
+        vgrad(d, px, y + 24, px + 32, y + 92, (228, 238, 248), (196, 214, 232))
+        d.rectangle([px, y + 24, px + 32, y + 92], outline=INK, width=1)
+        d.line([px + 16, y + 24, px + 16, y + 92], fill=INK, width=1)
+        d.line([px, y + 56, px + 32, y + 56], fill=INK, width=1)
+    # gold banner: location left, summit right (with shade)
+    d.rectangle([x, y + 20, x + w, y + 22], fill=GOLD_D)
+    hgrad(d, x, y, x + w, y + 20, (216, 176, 60), (188, 146, 32))
     d.text((x + 6, y + 10), "APEC 2026 · SHENZHEN", font=SANS_B(9),
            fill=INK, anchor="lm")
     d.text((x + w - 6, y + 10), "FIRST US–CHINA–RUSSIA SUMMIT",
            font=SANS_B(9), fill=INK, anchor="rm")
-    # bigger flags behind the three leaders
+    # bigger flags behind the three leaders (with pole shadows)
     flag_us(d, x + 24, y + 24, 46, 30)
     flag_cn(d, x + w / 2 - 23, y + 24, 46, 30)
     flag_ru(d, x + w - 70, y + 24, 46, 30)
     base = y + h - 26
-    figure(d, x + 52, base, NAVY, BRICK, SKIN, None, "blond")
-    figure(d, x + w / 2, base, (20, 20, 20), BRICK, SKIN2, None, "black")
+    figure(d, x + 52, base, NAVY, BRICK, SKIN, None, "blond-swept",
+           mouth="frown", brow="frown")
+    figure(d, x + w / 2, base, (20, 20, 20), BRICK, SKIN2, None,
+           "black-flat", mouth="smile", brow="flat")
     figure(d, x + w - 52, base, (60, 60, 70), (40, 90, 160), SKIN, None,
-           "grey")
-    # table + nameplates + microphones
-    d.rectangle([x + 8, base + 2, x + w - 8, base + 22], fill=(240, 236, 222),
-                outline=INK, width=1)
+           "grey-receding", mouth="neutral", brow="raised")
+    # table: wood gradient + gold edge + reflection streaks
+    vgrad(d, x + 8, base + 2, x + w - 8, base + 22, (244, 238, 224),
+          (214, 202, 178))
+    d.rectangle([x + 8, base + 2, x + w - 8, base + 22], outline=INK, width=1)
     d.line([x + 8, base + 2, x + w - 8, base + 2], fill=GOLD, width=2)
     for cx, name in [(x + 52, "TRUMP"), (x + w / 2, "XI"),
                      (x + w - 52, "PUTIN")]:
+        d.rectangle([cx - 26, base + 6, cx + 26, base + 20], fill=(225, 220, 205),
+                    outline=INK, width=1)
         d.rectangle([cx - 26, base + 5, cx + 26, base + 19], fill=(255, 255, 255),
                     outline=INK, width=1)
         d.text((cx, base + 12), name, font=SANS_B(9), fill=INK, anchor="mm")
@@ -297,8 +424,13 @@ def scene_apec(d, x, y, w, h):
 
 
 def scene_icj(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (219, 230, 222))
-    # courthouse: pediment, brick facade, arched windows, door, steps
+    # sky: pale morning gradient + two clouds
+    vgrad(d, x, y, x + w, y + h, (214, 228, 238), (186, 206, 222))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    for ccx, ccy in [(x + 30, y + 10), (x + w - 60, y + 6)]:
+        d.ellipse([ccx - 16, ccy - 4, ccx + 16, ccy + 6], fill=(255, 255, 255),
+                  outline=(200, 210, 220), width=1)
+    # courthouse: brick facade with coursing, pediment, gold disc
     bx, by, bw, bh = x + 10, y + 22, 170, 64
     d.polygon([(bx - 8, by), (bx + bw / 2, by - 14), (bx + bw + 8, by)],
               fill=(176, 58, 46), outline=INK, width=1)
@@ -306,30 +438,56 @@ def scene_icj(d, x, y, w, h):
               outline=INK, width=1)
     d.rectangle([bx, by, bx + bw, by + bh], fill=(188, 110, 70),
                 outline=INK, width=1)
+    # brick coursing: mortar lines + tone variation
+    for yy in range(by + 8, by + bh, 8):
+        d.line([bx, yy, bx + bw, yy], fill=(150, 80, 50), width=1)
+    for yy, xx in [(by + 12, bx + 30), (by + 28, bx + 90), (by + 44, bx + 50),
+                   (by + 52, bx + 120)]:
+        d.rectangle([xx, yy, xx + 18, yy + 5], fill=(168, 92, 58))
     d.rectangle([bx, by, bx + bw, by + 6], fill=(150, 80, 50))
+    # four white columns with capitals + bases, in front of the facade
     for i in range(4):
         cx = bx + 24 + i * 38
-        d.rectangle([cx - 6, by + 10, cx + 6, by + bh - 4],
-                    fill=(250, 244, 228), outline=INK, width=1)
         d.rectangle([cx - 8, by + 8, cx + 8, by + 12], fill=(250, 244, 228),
                     outline=INK, width=1)
+        d.rectangle([cx - 6, by + 12, cx + 6, by + bh - 6],
+                    fill=(250, 244, 228), outline=INK, width=1)
+        d.line([cx + 2, by + 12, cx + 2, by + bh - 6], fill=(200, 190, 170),
+               width=2)
+        d.rectangle([cx - 8, by + bh - 6, cx + 8, by + bh - 2],
+                    fill=(250, 244, 228), outline=INK, width=1)
+    # arched windows between the columns, blue glass + highlight
     for wx in (bx + 43, bx + 65, bx + 105, bx + 127):
         d.rectangle([wx, by + 16, wx + 8, by + 34], fill=(90, 130, 170),
                     outline=INK, width=1)
+        d.line([wx + 1, by + 18, wx + 6, by + 32], fill=(200, 225, 245),
+               width=2)
     # arched door
     d.rectangle([bx + 76, by + 40, bx + 94, by + bh], fill=(40, 40, 60),
                 outline=INK, width=1)
     d.pieslice([bx + 76, by + 28, bx + 94, by + 46], 180, 360,
                fill=(40, 40, 60), outline=INK, width=1)
-    # steps
+    # steps with shade
     d.rectangle([bx - 6, by + bh, bx + bw + 6, by + bh + 4],
                 fill=(120, 90, 70), outline=INK, width=1)
     d.rectangle([bx - 10, by + bh + 4, bx + bw + 10, by + bh + 8],
                 fill=(140, 110, 85), outline=INK, width=1)
     d.rectangle([bx - 14, by + bh + 8, bx + bw + 14, by + bh + 12],
                 fill=(160, 130, 100), outline=INK, width=1)
-    # bigger scales of justice
-    sx = x + w - 70
+    # clock tower, between the courthouse and the scales
+    tx = x + 196
+    d.rectangle([tx, y + 34, tx + 22, y + 88], fill=(188, 110, 70),
+                outline=INK, width=1)
+    for yy in range(y + 42, y + 86, 8):
+        d.line([tx, yy, tx + 22, yy], fill=(150, 80, 50), width=1)
+    d.polygon([(tx - 3, y + 34), (tx + 11, y + 22), (tx + 25, y + 34)],
+              fill=(140, 40, 32), outline=INK, width=1)
+    d.ellipse([tx + 4, y + 38, tx + 18, y + 52], fill=(250, 244, 228),
+              outline=INK, width=1)
+    d.line([tx + 11, y + 45, tx + 11, y + 39], fill=INK, width=2)
+    d.line([tx + 11, y + 45, tx + 16, y + 47], fill=INK, width=2)
+    # bigger scales of justice, gold with shade
+    sx = x + w - 108
     d.rectangle([sx - 9, y + 90, sx + 9, y + 96], fill=GOLD, outline=INK,
                 width=1)
     d.line([sx, y + 20, sx, y + 90], fill=INK, width=4)
@@ -339,10 +497,12 @@ def scene_icj(d, x, y, w, h):
         d.line([sx + dx, y + 28, sx + dx + 12, y + 56], fill=INK, width=2)
         d.arc([sx + dx - 14, y + 50, sx + dx + 14, y + 66], 0, 180,
               fill=GOLD, width=4)
+        d.arc([sx + dx - 14, y + 50, sx + dx + 14, y + 66], 90, 180,
+              fill=GOLD_D, width=4)
     d.ellipse([sx - 6, y + 14, sx + 6, y + 26], fill=GOLD, outline=INK,
               width=1)
-    # small Myanmar flag on a pole
-    fx = x + w - 128
+    # small Myanmar flag on a pole, right of the scales
+    fx = x + 282
     d.line([fx, y + 62, fx, y + 98], fill=INK, width=2)
     d.rectangle([fx, y + 62, fx + 26, y + 68], fill=(254, 203, 0),
                 outline=INK, width=1)
@@ -366,11 +526,16 @@ def scene_icj(d, x, y, w, h):
 
 
 def scene_cop31(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (207, 227, 221))
-    # bigger globe with visible continents
+    vgrad(d, x, y, x + w, y + h, (216, 232, 226), (196, 218, 210))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    # globe with radial shading: concentric arcs darker toward the edge,
+    # white highlight top-left, lat/lon lines
     gx, gy, gr = x + 48, y + 54, 44
     d.ellipse([gx - gr, gy - gr, gx + gr, gy + gr], fill=(70, 130, 180),
               outline=INK, width=2)
+    for rr, col in [(38, (64, 122, 172)), (30, (58, 114, 164)),
+                    (20, (52, 106, 156))]:
+        d.arc([gx - rr, gy - rr, gx + rr, gy + rr], 0, 360, fill=col, width=6)
     d.ellipse([gx - 26, gy - 32, gx + 2, gy - 8], fill=(90, 170, 90),
               outline=INK, width=1)
     d.ellipse([gx - 10, gy + 2, gx + 24, gy + 30], fill=(90, 170, 90),
@@ -380,20 +545,29 @@ def scene_cop31(d, x, y, w, h):
     d.arc([gx - gr, gy - gr, gx + gr, gy + gr], 200, 340, fill=INK, width=1)
     d.arc([gx - gr + 12, gy - gr, gx + gr - 12, gy + gr], 90, 270,
           fill=(255, 255, 255), width=1)
-    # bigger thermometer with red mercury
+    # highlight: white crescent top-left
+    d.arc([gx - gr + 4, gy - gr + 4, gx + gr - 14, gy + gr - 14], 150, 260,
+          fill=(255, 255, 255), width=3)
+    d.ellipse([gx - 30, gy - 30, gx - 12, gy - 16], fill=(255, 255, 255))
+    # thermometer with glass highlight + red mercury
     tx = x + 108
     d.rounded_rectangle([tx - 7, y + 12, tx + 7, y + 84], radius=3,
                         fill=(255, 255, 255), outline=INK, width=1)
+    d.line([tx - 4, y + 16, tx - 4, y + 80], fill=(220, 235, 245), width=2)
     for ty in (y + 24, y + 36, y + 48, y + 60, y + 72):
         d.line([tx + 7, ty, tx + 12, ty], fill=INK, width=1)
     d.rectangle([tx - 3, y + 38, tx + 3, y + 84], fill=BRICK)
     d.ellipse([tx - 14, y + 72, tx + 14, y + 100], fill=BRICK, outline=INK,
               width=1)
     d.ellipse([tx - 6, y + 80, tx + 6, y + 92], fill=(255, 120, 100))
-    # draft document with text lines and FOSSIL FUELS struck through
+    # draft document with drop shadow + folded corner, FOSSIL FUELS struck
     dx, dy, dw, dh = x + 132, y + 10, 186, 84
+    d.rectangle([dx + 3, dy + 3, dx + dw + 3, dy + dh + 3],
+                fill=(190, 182, 160))
     d.rectangle([dx, dy, dx + dw, dy + dh], fill=(255, 255, 255),
                 outline=INK, width=1)
+    d.polygon([(dx + dw - 14, dy), (dx + dw, dy + 14), (dx + dw, dy),
+               (dx + dw - 14, dy)], fill=(230, 226, 214), outline=INK)
     d.text((dx + 8, dy + 6), "DRAFT DEAL · 19 NOV", font=SANS_B(9), fill=INK)
     d.text((dx + 8, dy + 22), "FOSSIL FUELS", font=SANS_B(13), fill=INK)
     d.line([dx + 6, dy + 29, dx + 118, dy + 29], fill=BRICK, width=3)
@@ -401,9 +575,11 @@ def scene_cop31(d, x, y, w, h):
            fill=INK)
     for ly in (dy + 56, dy + 62, dy + 68):
         d.line([dx + 8, ly, dx + 96, ly], fill=(160, 160, 160), width=2)
-    # stamp CUT over the document's lower corner
+    # stamp CUT over the document's lower corner, double border
     d.rectangle([x + 236, y + 68, x + 302, y + 90], fill=BRICK,
                 outline=INK, width=1)
+    d.rectangle([x + 239, y + 71, x + 299, y + 87], outline=(255, 255, 255),
+                width=1)
     d.text((x + 269, y + 79), "CUT", font=SANS_B(12),
            fill=(255, 255, 255), anchor="mm")
     # label strip inside the picture
@@ -413,145 +589,226 @@ def scene_cop31(d, x, y, w, h):
     d.text((x + w - 8, y + 110), "TALKS END FRIDAY", font=SANS_B(10),
            fill=GOLD, anchor="rm")
 
-
 def scene_kerch(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (206, 220, 228))
-    # label chip
-    d.rectangle([x + 4, y + 4, x + 84, y + 18], fill=NAVY, outline=INK, width=1)
-    d.text((x + 44, y + 11), "KERCH BRIDGE", font=SANS_B(8),
-           fill=(255, 255, 255), anchor="mm")
-    # sea
-    d.rectangle([x, y + h - 26, x + w, y + h], fill=(120, 150, 175),
-                outline=INK, width=1)
-    d.line([x, y + h - 20, x + w, y + h - 20], fill=(200, 220, 235), width=1)
-    # bridge towers + deck + rails
+    # dawn sky gradient + sea gradient
+    vgrad(d, x, y, x + w, y + h - 26, (224, 210, 190), (196, 210, 226))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    vgrad(d, x, y + h - 26, x + w, y + h, (140, 168, 190), (100, 135, 165))
+    d.rectangle([x, y + h - 26, x + w, y + h], outline=INK, width=1)
+    for wx in (x + 20, x + 70, x + 130, x + 170):
+        d.line([wx, y + h - 20, wx + 14, y + h - 20], fill=(210, 228, 240),
+               width=1)
+    # bridge towers + deck + rails + suspenders (arc lowered: crown at y+20)
     for px in (x + 108, x + 178):
-        d.rectangle([px - 3, y + 4, px + 3, y + h - 26], fill=(90, 90, 100),
+        d.rectangle([px - 3, y + 12, px + 3, y + h - 26], fill=(90, 90, 100),
                     outline=INK, width=1)
     d.line([x + 8, y + h - 34, x + w - 8, y + h - 34], fill=INK, width=4)
     d.line([x + 8, y + h - 38, x + w - 8, y + h - 38], fill=INK, width=1)
-    d.arc([x + 20, y + 12, x + w - 20, y + h - 20], 180, 360, fill=INK,
+    d.arc([x + 20, y + 20, x + w - 20, y + h - 20], 180, 360, fill=INK,
           width=3)
     for px in (x + 40, x + 90, x + 140, x + w - 40):
         d.line([px, y + h - 34, px, y + h - 26], fill=INK, width=3)
-    # smoke + explosion
+    for sx in (x + 60, x + 100, x + 150):
+        d.line([sx, y + 26, sx, y + h - 34], fill=(120, 120, 130), width=1)
+    # smoke (3 puffs) + layered explosion
     d.ellipse([x + 126, y + 0, x + 148, y + 12], fill=(120, 120, 120),
               outline=INK, width=1)
     d.ellipse([x + 140, y + 2, x + 162, y + 14], fill=(160, 160, 160),
               outline=INK, width=1)
+    d.ellipse([x + 152, y + 0, x + 170, y + 10], fill=(100, 100, 100),
+              outline=INK, width=1)
     burst(d, x + 150, y + 22, 16, (245, 180, 40))
     burst(d, x + 150, y + 22, 9, BRICK)
+    burst(d, x + 150, y + 22, 4, (255, 240, 120))
+    # label chip: bottom-left over the sea (clear of the arc, like rank 1)
+    d.rectangle([x + 4, y + h - 22, x + 84, y + h - 8], fill=NAVY,
+                outline=INK, width=1)
+    d.text((x + 44, y + h - 15), "KERCH BRIDGE", font=SANS_B(8),
+           fill=(255, 255, 255), anchor="mm")
 
 
 def scene_riyadh(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (28, 38, 66))
+    # night sky gradient: deep navy top, purple horizon
+    vgrad(d, x, y, x + w, y + h, (22, 30, 58), (52, 48, 92))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    # stars
+    for sx, sy in [(x + 18, y + 8), (x + 52, y + 5), (x + 96, y + 10),
+                   (x + 150, y + 6), (x + 180, y + 12), (x + 128, y + 4)]:
+        d.ellipse([sx - 1, sy - 1, sx + 1, sy + 1], fill=(255, 255, 255))
     # label chip
     d.rectangle([x + 4, y + 4, x + 82, y + 18], fill=(10, 14, 26),
                 outline=GOLD, width=1)
     d.text((x + 43, y + 11), "OVER RIYADH", font=SANS_B(8), fill=GOLD,
            anchor="mm")
-    # skyline: more towers, lit windows, one needle spire
+    # skyline: towers with varied lit windows, one needle spire
     for bx, bw, bh in [(6, 18, 22), (28, 14, 32), (46, 20, 26), (70, 14, 38),
                        (88, 22, 28), (114, 16, 40), (134, 20, 24),
                        (158, 18, 34), (180, 12, 20)]:
         d.rectangle([x + bx, y + h - bh, x + bx + bw, y + h], fill=(10, 14, 26),
                     outline=(60, 70, 100), width=1)
         for wy in range(y + h - bh + 4, y + h - 4, 8):
-            d.rectangle([x + bx + 4, wy, x + bx + 8, wy + 4], fill=GOLD)
+            for wx in range(x + bx + 4, x + bx + bw - 4, 8):
+                if (wx + wy) % 16 < 8:
+                    d.rectangle([wx, wy, wx + 3, wy + 4], fill=GOLD)
+                else:
+                    d.rectangle([wx, wy, wx + 3, wy + 4],
+                                fill=(140, 170, 220))
     d.polygon([(x + 120, y + h - 40), (x + 124, y + 2), (x + 128, y + h - 40)],
               fill=(10, 14, 26), outline=(60, 70, 100))
-    # interceptor trails + bursts
+    d.ellipse([x + 122, y + 0, x + 126, y + 4], fill=(255, 80, 80))
+    # interceptor trails (glow: thick pale + thin bright) + bursts
+    d.arc([x + 20, y - 34, x + 140, y + 56], 300, 30, fill=(200, 200, 220),
+          width=4)
     d.arc([x + 20, y - 34, x + 140, y + 56], 300, 30, fill=(255, 255, 255),
           width=2)
+    d.arc([x + 60, y - 20, x + 190, y + 60], 300, 45, fill=(255, 200, 80),
+          width=4)
     d.arc([x + 60, y - 20, x + 190, y + 60], 300, 45, fill=(255, 220, 100),
           width=2)
     burst(d, x + 138, y + 12, 9, (255, 220, 100))
+    burst(d, x + 138, y + 12, 4, (255, 255, 255))
     burst(d, x + 172, y + 20, 7, (255, 255, 255))
 
 
 def scene_cyclone(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (200, 222, 235))
+    # sea gradient + sand coast wedge lower-left
+    vgrad(d, x, y, x + w, y + h, (190, 214, 232), (150, 185, 215))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    d.polygon([(x, y + h), (x, y + 34), (x + 78, y + h)], fill=(232, 214, 170),
+              outline=INK, width=1)
+    d.line([x + 4, y + 44, x + 60, y + h - 4], fill=(200, 180, 140), width=1)
+    d.text((x + 8, y + h - 10), "ODISHA", font=SANS_B(9), fill=BRICK)
     # label chip
     d.rectangle([x + 4, y + 4, x + 96, y + 18], fill=NAVY, outline=INK, width=1)
     d.text((x + 50, y + 11), "CYCLONE AKVAN", font=SANS_B(8),
            fill=(255, 255, 255), anchor="mm")
-    # coastline: sand wedge lower-left, sea upper-right
-    d.polygon([(x, y + h), (x, y + 34), (x + 78, y + h)], fill=(232, 214, 170),
-              outline=INK, width=1)
-    d.text((x + 8, y + h - 10), "ODISHA", font=SANS_B(9), fill=BRICK)
-    # bigger spiral over the sea
-    cx, cy = x + 128, y + 24
-    for r in (24, 18, 13, 8):
-        d.arc([cx - r, cy - r, cx + r, cy + r], 20, 300, fill=NAVY, width=3)
-    d.ellipse([cx - 4, cy - 4, cx + 4, cy + 4], fill=NAVY)
-    # red arrow from the spiral toward the Odisha coast
-    d.line([cx - 18, cy + 8, x + 52, y + h - 12], fill=BRICK, width=3)
+    # TRUE spiral: Archimedean polyline, white cloud bands over navy core
+    # (radius capped so the spiral stays inside the 52px scene)
+    import math
+    cx, cy = x + 128, y + 27
+    pts = []
+    for k in range(0, 190):
+        t = k / 190.0 * 2.6 * math.pi
+        r = 2 + t * 2.6
+        pts.append((cx + r * math.cos(t), cy + r * math.sin(t)))
+    d.line(pts, fill=(255, 255, 255), width=5)
+    d.line(pts, fill=NAVY, width=2)
+    d.ellipse([cx - 5, cy - 5, cx + 5, cy + 5], fill=NAVY)
+    d.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], fill=(255, 255, 255))
+    # rain bands: short white dashes curling outward
+    for ang, rr in [(0.6, 26), (2.2, 27), (3.8, 26), (5.2, 27)]:
+        bx = cx + rr * math.cos(ang)
+        by = cy + rr * math.sin(ang)
+        d.line([bx, by, bx + 8 * math.cos(ang + 1.2),
+                by + 8 * math.sin(ang + 1.2)], fill=(255, 255, 255), width=2)
+    # red arrow from the spiral toward the Odisha coast (curved path)
+    d.line([cx - 18, cy + 8, x + 70, y + h - 22, x + 52, y + h - 12],
+           fill=BRICK, width=3)
     d.polygon([(x + 52, y + h - 12), (x + 62, y + h - 16), (x + 60, y + h - 4)],
               fill=BRICK)
 
 
 def scene_seoul(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (238, 232, 210))
-    # taegeuk
+    # courtroom: wood-panelled wall (vertical panels + grain)
+    vgrad(d, x, y, x + w, y + h, (226, 206, 178), (206, 184, 152))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    for px in range(x + 8, x + w, 32):
+        d.line([px, y, px, y + h], fill=(170, 140, 100), width=1)
+    # Korean flag, top-left: taegeuk + 4 trigram bars at the corners
     d.ellipse([x + 14, y + 6, x + 40, y + 32], fill=(255, 255, 255),
               outline=INK, width=1)
     d.pieslice([x + 14, y + 6, x + 40, y + 32], 180, 360, fill=BRICK)
     d.pieslice([x + 14, y + 6, x + 40, y + 32], 0, 180, fill=NAVY)
-    # solid wooden gavel: thick handle + block head
-    d.line([x + 44, y + 40, x + 118, y + 12], fill=(60, 35, 10), width=11)
-    d.line([x + 44, y + 40, x + 118, y + 12], fill=(140, 90, 35), width=7)
-    d.polygon([(x + 108, y + 2), (x + 146, y + 2), (x + 152, y + 20),
-               (x + 114, y + 20)], fill=(90, 55, 15), outline=INK, width=1)
-    d.line([x + 118, y + 4, x + 124, y + 18], fill=(60, 35, 10), width=2)
-    d.line([x + 134, y + 4, x + 140, y + 18], fill=(60, 35, 10), width=2)
-    # sound block the gavel strikes
-    d.rounded_rectangle([x + 128, y + 32, x + 188, y + 46], radius=3,
+    for tx, ty, solid in [(x + 4, y + 6, True), (x + 44, y + 6, False),
+                          (x + 4, y + 28, False), (x + 44, y + 28, True)]:
+        for k in range(3):
+            d.line([tx, ty + k * 3, tx + 10, ty + k * 3], fill=INK, width=2)
+            if not solid and k == 1:
+                d.line([tx + 4, ty + k * 3, tx + 6, ty + k * 3],
+                       fill=(226, 206, 178), width=2)
+    # solid wooden gavel: handle with grain + block head with rings
+    d.line([x + 52, y + 46, x + 122, y + 16], fill=(60, 35, 10), width=11)
+    d.line([x + 52, y + 46, x + 122, y + 16], fill=(140, 90, 35), width=7)
+    d.line([x + 60, y + 43, x + 116, y + 17], fill=(90, 55, 15), width=1)
+    d.polygon([(x + 112, y + 4), (x + 150, y + 4), (x + 156, y + 22),
+               (x + 118, y + 22)], fill=(90, 55, 15), outline=INK, width=1)
+    d.line([x + 122, y + 6, x + 128, y + 20], fill=(60, 35, 10), width=2)
+    d.line([x + 138, y + 6, x + 144, y + 20], fill=(60, 35, 10), width=2)
+    d.line([x + 112, y + 13, x + 154, y + 13], fill=(160, 110, 50), width=1)
+    # sound block the gavel strikes: wood rings
+    d.rounded_rectangle([x + 128, y + 34, x + 188, y + 48], radius=3,
                         fill=(150, 110, 60), outline=INK, width=1)
-    d.line([x + 128, y + 36, x + 188, y + 36], fill=(90, 55, 15), width=2)
+    d.ellipse([x + 140, y + 36, x + 176, y + 46], outline=(90, 55, 15),
+              width=1)
+    d.line([x + 128, y + 38, x + 188, y + 38], fill=(90, 55, 15), width=2)
     # motion ticks
-    for mx, my in [(x + 96, y + 30), (x + 104, y + 36)]:
+    for mx, my in [(x + 96, y + 32), (x + 104, y + 38)]:
         d.line([mx, my, mx + 8, my - 6], fill=INK, width=2)
-    # stamp OVERTURNED, bottom-left, clear of the block
+    # stamp OVERTURNED, bottom-left, double border, clear of the block
     d.rectangle([x + 6, y + h - 18, x + 92, y + h - 4], fill=BRICK,
                 outline=INK, width=1)
+    d.rectangle([x + 9, y + h - 15, x + 89, y + h - 7], outline=(255, 255, 255),
+                width=1)
     d.text((x + 49, y + h - 11), "OVERTURNED", font=SANS_B(9),
            fill=(255, 255, 255), anchor="mm")
 
 
 def scene_greenland(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (210, 226, 238))
-    # bigger mountains with snow caps
+    # arctic sky gradient + sea at the bottom with ice floes
+    vgrad(d, x, y, x + w, y + h, (204, 224, 240), (170, 200, 226))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    d.rectangle([x, y + h - 12, x + w, y + h], fill=(150, 190, 220),
+                outline=INK, width=1)
+    for fx, fw in [(x + 12, 22), (x + 80, 16), (x + 150, 26)]:
+        d.ellipse([fx, y + h - 9, fx + fw, y + h - 3], fill=(255, 255, 255),
+                  outline=(120, 160, 190), width=1)
+    # mountains: light face + blue-grey shaded face + snow caps
     d.polygon([(x + 2, y + h), (x + 62, y + 6), (x + 124, y + h)],
               fill=(240, 244, 250), outline=INK, width=1)
+    d.polygon([(x + 62, y + 6), (x + 124, y + h), (x + 62, y + h)],
+              fill=(196, 212, 228), outline=INK, width=1)
     d.polygon([(x + 50, y + 18), (x + 62, y + 6), (x + 74, y + 18)],
               fill=(255, 255, 255), outline=INK, width=1)
     d.polygon([(x + 76, y + h), (x + 138, y + 12), (x + 196, y + h)],
-              fill=(200, 216, 230), outline=INK, width=1)
+              fill=(210, 224, 238), outline=INK, width=1)
+    d.polygon([(x + 138, y + 12), (x + 196, y + h), (x + 138, y + h)],
+              fill=(170, 192, 214), outline=INK, width=1)
     d.polygon([(x + 126, y + 24), (x + 138, y + 12), (x + 150, y + 24)],
               fill=(255, 255, 255), outline=INK, width=1)
-    # bigger flags on poles
+    # flags on poles: Denmark CORRECT (red + white cross), then US
     d.line([x + 16, y + 8, x + 16, y + 26], fill=INK, width=2)
-    d.rectangle([x + 16, y + 8, x + 50, y + 24], fill=(255, 255, 255),
-                outline=INK, width=1)
-    d.rectangle([x + 16, y + 14, x + 50, y + 18], fill=BRICK)
-    d.rectangle([x + 30, y + 8, x + 34, y + 24], fill=BRICK)
+    flag_dk(d, x + 16, y + 8, 34, 16)
     d.line([x + 56, y + 8, x + 56, y + 26], fill=INK, width=2)
     flag_us(d, x + 56, y + 8, 34, 16)
-    # badge 109-0
+    # badge 109-0 with shadow
+    d.rectangle([x + w - 51, y + 7, x + w - 5, y + 25], fill=(120, 40, 32))
     d.rectangle([x + w - 52, y + 6, x + w - 6, y + 24], fill=BRICK,
                 outline=INK, width=1)
     d.text((x + w - 29, y + 15), "109–0", font=SANS_B(10),
            fill=(255, 255, 255), anchor="mm")
 
-
 def scene_anthropic(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (24, 60, 44))
+    # dark green board with faint gridlines
+    d.rectangle([x, y, x + w, y + h], fill=(24, 60, 44), outline=INK, width=1)
+    for gy in range(y + 10, y + h, 12):
+        d.line([x, gy, x + w, gy], fill=(36, 78, 58), width=1)
+    for gx in range(x + 12, x + w, 24):
+        d.line([gx, y, gx, y + h], fill=(36, 78, 58), width=1)
     d.text((x + 10, y + 6), "ANT", font=SANS_B(20), fill=(255, 255, 255))
+    d.text((x + 10, y + 26), "NASDAQ", font=SANS_B(8), fill=(160, 200, 170))
     pts = [(x + 12, y + h - 12), (x + 50, y + h - 22), (x + 80, y + h - 18),
            (x + 115, y + h - 28), (x + 150, y + h - 34), (x + 182, y + h - 42)]
-    d.line(pts, fill=(120, 220, 140), width=3)
-    d.polygon(pts + [(x + 182, y + h), (x + 12, y + h)],
-              fill=(60, 140, 80))
+    # area fill: vertical gradient bands under the line
+    for i in range(len(pts) - 1):
+        x0b, y0b = pts[i]
+        x1b, y1b = pts[i + 1]
+        for xx in range(int(x0b), int(x1b)):
+            t = (xx - x0b) / max(1, (x1b - x0b))
+            yy = y0b + (y1b - y0b) * t
+            d.line([xx, yy, xx, y + h], fill=lerp((40, 100, 62),
+                   (24, 60, 44), (yy - (y + 8)) / max(1, (y + h) - (y + 8))))
+    # glow: thick pale line under the bright line
+    d.line(pts, fill=(90, 190, 120), width=5)
     d.line(pts, fill=(120, 220, 140), width=3)
     d.polygon([(x + 182, y + h - 42), (x + 182, y + h - 32),
                (x + 168, y + h - 42)], fill=(120, 220, 140))
@@ -563,6 +820,9 @@ def scene_anthropic(d, x, y, w, h):
                fill=(120, 220, 140), width=2)
         d.rectangle([x + bx, y + top, x + bx + 10, y + top + bh],
                     fill=(120, 220, 140), outline=(255, 255, 255), width=1)
+    d.text((x + 10, y + h - 12), "FIRST DAY", font=SANS_B(8),
+           fill=(160, 200, 170))
+    d.rectangle([x + w - 75, y + h - 23, x + w - 7, y + h - 7], fill=(120, 90, 20))
     d.rectangle([x + w - 74, y + h - 24, x + w - 8, y + h - 8], fill=GOLD,
                 outline=INK, width=1)
     d.text((x + w - 41, y + h - 16), "IPO $83", font=SANS_B(10), fill=INK,
@@ -570,13 +830,31 @@ def scene_anthropic(d, x, y, w, h):
 
 
 def scene_gta(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (88, 52, 130))
+    # purple dusk gradient + city skyline silhouette with lit windows
+    vgrad(d, x, y, x + w, y + h, (110, 66, 150), (70, 40, 110))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    for bx, bw, bh in [(4, 22, 18), (30, 16, 26), (50, 20, 20), (74, 14, 30),
+                       (92, 24, 16), (120, 16, 24), (140, 20, 18),
+                       (164, 18, 28), (186, 12, 16)]:
+        d.rectangle([x + bx, y + h - bh, x + bx + bw, y + h],
+                    fill=(40, 22, 64), outline=(60, 36, 92), width=1)
+        for wy in range(y + h - bh + 4, y + h - 3, 7):
+            for wx in range(x + bx + 3, x + bx + bw - 3, 7):
+                if (wx * 3 + wy) % 14 < 6:
+                    d.rectangle([wx, wy, wx + 2, wy + 3], fill=(255, 210, 90))
+    # neon glow behind the controller
+    cx, cy = x + w / 2, y + 34
+    d.ellipse([cx - 66, cy - 20, cx + 66, cy + 20], fill=(150, 100, 190))
+    d.ellipse([cx - 60, cy - 16, cx + 60, cy + 16], fill=(120, 80, 165))
+    # big VI with gold shadow
+    d.text((x + 9, y + 5), "VI", font=SERIF_B(20), fill=GOLD, anchor="la")
     d.text((x + 8, y + 4), "VI", font=SERIF_B(20), fill=(255, 255, 255),
            anchor="la")
     d.text((x + w - 6, y + 6), "13 YEARS ON", font=SANS_B(8),
            fill=GOLD, anchor="ra")
-    # bright white controller with sticks, d-pad and buttons
-    cx, cy = x + w / 2, y + 34
+    # bright white controller with sticks, d-pad and buttons + underside shade
+    d.rounded_rectangle([cx - 58, cy - 12, cx + 58, cy + 16], radius=12,
+                        fill=(180, 180, 195), outline=INK, width=2)
     d.rounded_rectangle([cx - 58, cy - 14, cx + 58, cy + 14], radius=12,
                         fill=(238, 238, 244), outline=INK, width=2)
     d.ellipse([cx - 46, cy - 9, cx - 32, cy + 5], fill=(60, 60, 75),
@@ -601,7 +879,11 @@ def scene_gta(d, x, y, w, h):
 
 
 def scene_bogota(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (238, 226, 200))
+    # street: warm wall gradient + building line behind the crowd
+    vgrad(d, x, y, x + w, y + h, (240, 230, 206), (226, 210, 178))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    d.rectangle([x, y + h - 22, x + w, y + h], fill=(200, 182, 150),
+                outline=INK, width=1)
     # Colombia flag on a pole, top-left
     d.line([x + 8, y + 4, x + 8, y + 26], fill=INK, width=2)
     d.rectangle([x + 8, y + 4, x + 40, y + 18], fill=(255, 220, 0),
@@ -609,32 +891,63 @@ def scene_bogota(d, x, y, w, h):
     d.rectangle([x + 8, y + 13, x + 40, y + 18], fill=(0, 60, 160))
     d.rectangle([x + 8, y + 16, x + 40, y + 18], fill=BRICK)
     # big banner held by the crowd (fully visible, clear of the flag)
+    d.rectangle([x + 47, y + 5, x + 193, y + 21], fill=(225, 220, 205),
+                outline=INK, width=1)
     d.rectangle([x + 46, y + 4, x + 192, y + 20], fill=(255, 255, 255),
                 outline=INK, width=1)
     d.text((x + 119, y + 12), "PARO NACIONAL", font=SANS_B(9), fill=INK,
            anchor="mm")
     d.line([x + 52, y + 20, x + 52, y + 28], fill=INK, width=2)
     d.line([x + 186, y + 20, x + 186, y + 28], fill=INK, width=2)
-    # crowd: full figures with heads, bodies, raised arms
+    # small placards in the crowd
+    for px, py in [(x + 30, y + 30), (x + 150, y + 32)]:
+        d.rectangle([px, py, px + 22, py + 10], fill=(255, 255, 255),
+                    outline=INK, width=1)
+        d.line([px + 3, py + 3, px + 19, py + 3], fill=BRICK, width=1)
+        d.line([px + 3, py + 7, px + 15, py + 7], fill=INK, width=1)
+    # crowd: full figures, varied skin/hair, one with a cap, raised arms
     cols = [BRICK, NAVY, (40, 120, 60), (200, 140, 40), (110, 60, 140)]
+    skins = [SKIN, SKIN2, (214, 164, 120), (232, 184, 138)]
     for i in range(9):
         cx = x + 14 + i * 20
-        d.ellipse([cx - 6, y + 26, cx + 6, y + 38], fill=SKIN, outline=INK,
-                  width=1)
-        d.polygon([(cx - 9, y + h), (cx - 8, y + 40), (cx + 8, y + 40),
+        d.ellipse([cx - 6, y + 36, cx + 6, y + 48], fill=skins[i % 4],
+                  outline=INK, width=1)
+        if i == 2:
+            d.pieslice([cx - 6, y + 36, cx + 6, y + 44], 180, 360,
+                       fill=BRICK, outline=INK, width=1)
+        elif i % 3 == 0:
+            d.pieslice([cx - 6, y + 36, cx + 6, y + 42], 180, 360,
+                       fill=(30, 30, 30), outline=INK, width=1)
+        d.polygon([(cx - 9, y + h), (cx - 8, y + 50), (cx + 8, y + 50),
                    (cx + 9, y + h)], fill=cols[i % 5], outline=INK, width=1)
-        d.line([cx - 7, y + 42, cx - 13, y + 32], fill=INK, width=2)
+        d.line([cx + 1, y + 52, cx + 8, y + 42], fill=INK, width=2)
+        if i % 2 == 0:
+            d.line([cx - 7, y + 52, cx - 13, y + 42], fill=INK, width=2)
 
 
 def scene_nairobi(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, (240, 224, 200))
-    # track with lane lines
+    # stadium: dusk gradient + stands with crowd dots + floodlights
+    vgrad(d, x, y, x + w, y + h, (236, 224, 196), (214, 196, 160))
+    d.rectangle([x, y, x + w, y + h], outline=INK, width=1)
+    d.rectangle([x, y, x + w, y + 12], fill=(60, 60, 80), outline=INK,
+                width=1)
+    for dx in range(x + 6, x + w - 4, 10):
+        d.ellipse([dx, y + 3, dx + 4, y + 7],
+                  fill=[(255, 220, 90), (255, 255, 255), (200, 120, 120),
+                        (120, 200, 140)][(dx // 10) % 4])
+    for fx in (x + 12, x + w - 84):
+        d.line([fx, y + 12, fx, y + 22], fill=INK, width=2)
+        d.ellipse([fx - 5, y + 8, fx + 5, y + 14], fill=(255, 240, 180),
+                  outline=INK, width=1)
+    # track with lane lines (slight perspective: lanes converge left)
     d.rectangle([x, y + h - 18, x + w, y + h], fill=(176, 96, 60),
                 outline=INK, width=1)
     d.line([x, y + h - 10, x + w, y + h - 10], fill=(255, 255, 255), width=1)
     d.line([x, y + h - 5, x + w, y + h - 5], fill=(255, 255, 255), width=1)
-    # full runner: head, leaning torso, bent arms, striding legs
-    cx, cy = x + 78, y + 10
+    d.line([x, y + h - 14, x + w, y + h - 16], fill=(220, 140, 100), width=1)
+    # full runner: head, leaning torso, bent arms, striding legs, shadow
+    cx, cy = x + 78, y + 16
+    d.ellipse([cx - 12, cy + 34, cx + 34, cy + 38], fill=(150, 110, 70))
     # back leg (extended behind)
     d.line([cx + 2, cy + 24, cx + 26, cy + 34], fill=INK, width=4)
     d.line([cx + 26, cy + 34, cx + 34, cy + 30], fill=INK, width=4)
@@ -649,6 +962,7 @@ def scene_nairobi(d, x, y, w, h):
     # torso (Kenya singlet: green top, red shorts)
     d.polygon([(cx - 6, cy + 8), (cx + 6, cy + 8), (cx + 8, cy + 24),
                (cx - 2, cy + 24)], fill=(0, 120, 60), outline=INK, width=1)
+    d.line([cx - 4, cy + 10, cx + 4, cy + 22], fill=(0, 90, 45), width=2)
     d.polygon([(cx - 2, cy + 22), (cx + 8, cy + 22), (cx + 6, cy + 28),
                (cx - 4, cy + 28)], fill=BRICK, outline=INK, width=1)
     # arms bent at the elbow
@@ -663,24 +977,34 @@ def scene_nairobi(d, x, y, w, h):
     d.line([cx - 7, cy - 1, cx + 7, cy - 1], fill=BRICK, width=2)
     # motion ticks
     for mx in (x + 30, x + 44):
-        d.line([mx, y + 20, mx + 8, y + 14], fill=INK, width=2)
-    # stamp BANNED
+        d.line([mx, y + 26, mx + 8, y + 20], fill=INK, width=2)
+    # stamp BANNED, double border
+    d.rectangle([x + w - 73, y + 7, x + w - 7, y + 25], fill=(120, 40, 32))
     d.rectangle([x + w - 72, y + 6, x + w - 8, y + 24], fill=BRICK,
                 outline=INK, width=1)
+    d.rectangle([x + w - 69, y + 9, x + w - 11, y + 21],
+                outline=(255, 255, 255), width=1)
     d.text((x + w - 40, y + 15), "BANNED", font=SANS_B(10),
            fill=(255, 255, 255), anchor="mm")
 
 
 def scene_canberra(d, x, y, w, h):
-    scene_frame(d, x, y, w, h, NAVY)
+    # navy board with faint chart lines + big 4.9% with shadow
+    d.rectangle([x, y, x + w, y + h], fill=NAVY, outline=INK, width=1)
+    for gy in range(y + 8, y + h, 12):
+        d.line([x, gy, x + w, gy], fill=(44, 72, 122), width=1)
+    d.text((x + 11, y + 5), "4.9%", font=SANS_B(24),
+           fill=(20, 36, 66), anchor="la")
     d.text((x + 10, y + 4), "4.9%", font=SANS_B(24),
            fill=(255, 255, 255), anchor="la")
-    # RISING arrow (the rate is UP — highest since 2024)
+    # RISING arrow (the rate is UP — highest since 2024), with shadow
+    d.line([x + 119, y + 29, x + 183, y + 9], fill=(120, 40, 32), width=5)
     d.line([x + 118, y + 28, x + 182, y + 8], fill=BRICK, width=4)
-    d.polygon([(x + 182, y + 8), (x + 168, y + 6), (x + 180, y + 20)],
+    d.polygon([(x + 183, y + 9), (x + 169, y + 7), (x + 181, y + 21)],
               fill=BRICK)
-    # three figures with real bodies below the figures
+    # three figures with real bodies + ground shadows
     for i, cx in enumerate([x + 40, x + 98, x + 156]):
+        d.ellipse([cx - 12, y + h - 4, cx + 12, y + h - 1], fill=(20, 36, 66))
         d.ellipse([cx - 6, y + 29, cx + 6, y + 41], fill=SKIN, outline=INK,
                   width=1)
         d.pieslice([cx - 6, y + 29, cx + 6, y + 37], 180, 360,
@@ -688,6 +1012,8 @@ def scene_canberra(d, x, y, w, h):
         d.polygon([(cx - 10, y + h), (cx - 9, y + 43), (cx + 9, y + 43),
                    (cx + 10, y + h)], fill=[(200, 200, 200), BRICK,
                    (40, 120, 60)][i], outline=INK, width=1)
+        d.line([cx + 1, y + 45, cx + 8, y + 60], fill=shade(
+            [(200, 200, 200), BRICK, (40, 120, 60)][i], 0.7), width=2)
         d.line([cx - 8, y + 45, cx - 13, y + 38], fill=INK, width=2)
         d.line([cx + 8, y + 45, cx + 13, y + 38], fill=INK, width=2)
 
@@ -818,17 +1144,18 @@ FOOTER = ("Claims are attributed, not stated as fact \u00b7 Pictures and "
 
 
 def hero_panel(d, x, y, w, h, item):
-    scene_h = 118
+    scene_h = 122
+    panel_shadow(d, x, y, w, h)
     item["scene"](d, x, y, w, scene_h)
     ty = y + scene_h + 6
     num_badge(d, x + 11, ty + 6, item["n"], r=11)
     kicker(d, x + 26, ty, item["place"], item["topic"])
     ty += 20
-    lines = wrap(item["head"], SERIF_B(19), w - 4)
-    ty = fit_lines(d, x + 2, ty, lines[:2], SERIF_B(19), INK, 22)
+    lines = wrap(item["head"], SERIF_B(21), w - 4)
+    ty = fit_lines(d, x + 2, ty, lines[:2], SERIF_B(21), INK, 22)
     ty += 2
     lines = wrap(item["deck"], SANS(10), w - 4)
-    fit_lines(d, x + 2, ty, lines[:3], SANS(10), INK, 13)
+    fit_lines(d, x + 2, ty, lines[:3], SANS(10), INK, 12)
     d.text((x + 2, y + h - 12), "\u2014 " + item["src"], font=SANS(10),
            fill=GREY)
     tw = SANS_B(10).getlength(item["tag"])
@@ -838,15 +1165,16 @@ def hero_panel(d, x, y, w, h, item):
 
 
 def card_panel(d, x, y, w, h, item):
-    scene_h = 50
+    scene_h = 52
+    panel_shadow(d, x, y, w, h)
     item["scene"](d, x, y, w, scene_h)
     ty = y + scene_h + 4
     num_badge(d, x + 9, ty + 5, item["n"], r=9)
     kicker(d, x + 20, ty - 1, item["place"], item["topic"],
            font=SANS_B(9))
     ty += 15
-    lines = wrap(item["head"], SERIF_B(13), w - 4)
-    ty = fit_lines(d, x + 2, ty, lines[:2], SERIF_B(13), INK, 14)
+    lines = wrap(item["head"], SERIF_B(14), w - 4)
+    ty = fit_lines(d, x + 2, ty, lines[:2], SERIF_B(14), INK, 14)
     lines = wrap(item["deck"], SANS(9), w - 4)
     fit_lines(d, x + 2, ty, lines[:2], SANS(9), INK, 10)
     d.text((x + 2, y + h - 11), "\u2014 " + item["src"], font=SANS(8),
@@ -859,6 +1187,7 @@ def card_panel(d, x, y, w, h, item):
 
 def draw():
     img = Image.new("RGB", (W, H), CREAM)
+    d = paper_texture(img)
     d = ImageDraw.Draw(img)
     d.rectangle([8, 8, W - 8, H - 8], outline=INK, width=2)
     x0, x1 = 16, W - 16
@@ -886,8 +1215,9 @@ def draw():
     bw, gap = 164, 4
     for i, (num, label) in enumerate(NUMBERS):
         bx = x0 + i * (bw + gap)
-        d.rectangle([bx, y, bx + bw, y + 52], fill=NAVY, outline=INK,
-                    width=1)
+        d.rectangle([bx + 2, y + 2, bx + bw + 2, y + 54], fill=SHADOW)
+        vgrad(d, bx, y, bx + bw, y + 52, (38, 66, 118), (24, 44, 82))
+        d.rectangle([bx, y, bx + bw, y + 52], outline=INK, width=1)
         nf = SANS_B(26)
         while nf.getlength(num) > bw - 10:
             nf = SANS_B(nf.size - 1)
@@ -917,19 +1247,19 @@ def draw():
     y = 196
     hw, hgap = 330, 7
     for i, item in enumerate(HEROES):
-        hero_panel(d, x0 + i * (hw + hgap), y, hw, 244, item)
+        hero_panel(d, x0 + i * (hw + hgap), y, hw, 248, item)
 
-    # tag legend
-    y = 444
+    # tag legend: one compact line
+    y = 450
     legend = ("HOW SURE ARE WE? \u2014 REPORTED: confirmed by multiple "
-              "sources \u00b7 CLAIM: as claimed by one side \u00b7 FORECAST: "
+              "sources \u00b7 CLAIM: one side\u2019s claim \u00b7 FORECAST: "
               "projection, not yet fact")
     d.text((x0, y), legend, font=SANS(10), fill=GREY)
 
     # secondary grid: 2 rows x 5
-    y = 460
+    y = 466
     kw, kgap = 196, 6
-    kh = 130
+    kh = 132
     for r in range(2):
         for c in range(5):
             item = CARDS[r * 5 + c]
@@ -937,7 +1267,7 @@ def draw():
                        item)
 
     # bottom band: briefs left, map right
-    y = 730
+    y = 742
     d.text((x0, y), "ALSO ON THURSDAY 19 NOVEMBER 2026", font=SANS_B(12),
            fill=INK)
     d.text((x1, y), "WHERE IT HAPPENED", font=SANS_B(12), fill=INK,
@@ -969,34 +1299,25 @@ def draw():
     d.text((mx, by + 152), "numbers match the stories \u00b7 dots: briefs",
            font=SANS(8), fill=GREY)
 
-    # DATE CHECK box (2 columns)
-    y = 914
-    d.rectangle([x0, y, x1, y + 74], outline=INK, width=2)
+    # DATE CHECK: compact — one bold claim line + wrapped lists
+    y = 926
+    d.rectangle([x0, y, x1, y + 52], outline=INK, width=2)
     d.text((x0 + 8, y + 5),
            "DATE CHECK \u2713  Every story on this page happened, or was "
            "first reported, on Thursday 19 November 2026.",
            font=SANS_B(11), fill=INK)
-    d.line([x0, y + 24, x1, y + 24], fill=LIGHT_LINE, width=1)
-    colw = (cw - 16) // 2
-    d.text((x0 + 8, y + 28), "LEFT OUT \u2014 18 NOV:",
-           font=SANS_B(10), fill=BRICK)
-    lines = wrap(LEFT_OUT, SANS(8), colw - 8)
-    ly = y + 40
-    for ln in lines[:3]:
+    d.line([x0, y + 22, x1, y + 22], fill=LIGHT_LINE, width=1)
+    ly = y + 27
+    lines = wrap("LEFT OUT \u2014 18 NOV: " + LEFT_OUT, SANS(8), cw - 16)
+    for ln in lines[:2]:
         d.text((x0 + 8, ly), ln, font=SANS(8), fill=INK)
         ly += 10
-    d.line([x0 + colw + 4, y + 26, x0 + colw + 4, y + 68], fill=LIGHT_LINE,
-           width=1)
-    d.text((x0 + colw + 12, y + 28), "NOT YET \u2014 20 NOV:",
-           font=SANS_B(10), fill=BRICK)
-    lines = wrap(NOT_YET, SANS(8), colw - 12)
-    ly = y + 40
-    for ln in lines[:2]:
-        d.text((x0 + colw + 12, ly), ln, font=SANS(8), fill=INK)
-        ly += 10
+    d.text((x0 + 8, ly),
+           "NOT YET \u2014 20 NOV: " + NOT_YET,
+           font=SANS(8), fill=INK)
 
     # footer sources
-    y = 990
+    y = 984
     fnt = SANSC(9)
     while fnt.getlength(FOOTER) > cw:
         fnt = SANSC(fnt.size - 1)
