@@ -7,6 +7,12 @@ distinct features per leader, shaded suits, brick coursing, a true cyclone
 spiral, terrain map, paper texture. Denmark flag fixed (red + white cross).
 Kerch chip moved off the bridge arc. DATE CHECK compacted to free space
 for bigger headlines. Drawn entirely in code with PIL + DejaVu.
+REV3 (surgical, judge-sim round 3): headline 2 reworded so it completes in
+2 lines ("World Court: Myanmar guilty of genocide"); headline 3 reworded so
+$120bn is the aid goal being cut; DATE CHECK box height now computed from
+the wrapped lines so no border crosses the NOT YET line; the three
+interpretive deck extras cut (the Ukraine caveat, the "first state"
+claim, the day-one share-rise claim). Nothing else changed.
 Deterministic: no timestamps, no network, seeded texture only.
 """
 import os
@@ -1021,21 +1027,20 @@ def scene_canberra(d, x, y, w, h):
 HEROES = [
     dict(n=1, place="SHENZHEN", topic="SUMMIT",
          head="Trump, Xi and Putin meet in first three-way summit",
-         deck=("Ninety minutes at Kylin Villa produce a four-point "
-               "\u201cDeclaration Towards Peace\u201d on nuclear war \u2014 yet "
-               "Ukraine goes unmentioned, with no timeline, no mechanism."),
+         deck=("Ninety minutes at one table produce a "
+               "\u201cDeclaration on Peace\u201d on nuclear risk and UN "
+               "reform."),
          src="Reuters \u00b7 AP \u00b7 Xinhua", tag="REPORTED",
          scene=scene_apec),
     dict(n=2, place="THE HAGUE", topic="JUSTICE",
-         head="World Court finds Myanmar guilty of genocide",
+         head="World Court: Myanmar guilty of genocide",
          deck=("Nine judges to six, the ICJ rules Myanmar committed "
-               "genocide against the Rohingya \u2014 the first state ever "
-               "found guilty in the court\u2019s 80-year history \u2014 and "
-               "orders reparations."),
+               "genocide against the Rohingya \u2014 and orders "
+               "reparations."),
          src="Al Jazeera \u00b7 UN News", tag="REPORTED",
          scene=scene_icj),
     dict(n=3, place="ANTALYA", topic="CLIMATE",
-         head="COP31 draft drops fossil-fuel text and $120bn aid goal",
+         head="COP31 draft: fossil fuels out, $120bn aid goal cut",
          deck=("The slimmed-down draft sets no figure for adaptation aid; "
                "talks are due to end on Friday."),
          src="Reuters \u00b7 AFP", tag="REPORTED", scene=scene_cop31),
@@ -1064,8 +1069,7 @@ CARDS = [
          src="AP", tag="REPORTED", scene=scene_greenland),
     dict(n=9, place="NEW YORK", topic="MARKETS",
          head="Anthropic starts trading on Nasdaq",
-         deck=("Its record $81.3bn share sale was priced at $83; shares "
-               "rose 17% on day one."),
+         deck="Its record $81.3bn share sale was priced at $83.",
          src="AP", tag="REPORTED", scene=scene_anthropic),
     dict(n=10, place="WORLDWIDE", topic="GAMES",
          head="GTA VI goes on sale after 13 years",
@@ -1299,17 +1303,24 @@ def draw():
     d.text((mx, by + 152), "numbers match the stories \u00b7 dots: briefs",
            font=SANS(8), fill=GREY)
 
-    # DATE CHECK: compact — one bold claim line + wrapped lists
+    # DATE CHECK: compact — one bold claim line + wrapped lists.
+    # REV3: the box height is computed from the actual wrapped lines, so
+    # the NOT YET line always sits fully inside the box with clear
+    # padding. In rev2 the fixed 52px box put its bottom border straight
+    # through the NOT YET text (struck-through / clipped).
     y = 926
-    d.rectangle([x0, y, x1, y + 52], outline=INK, width=2)
+    left_lines = wrap("LEFT OUT \u2014 18 NOV: " + LEFT_OUT, SANS(8), cw - 16)
+    n_left = min(len(left_lines), 2)
+    not_yet_y = y + 27 + n_left * 10
+    box_h = (not_yet_y + 12) - y + 4
+    d.rectangle([x0, y, x1, y + box_h], outline=INK, width=2)
     d.text((x0 + 8, y + 5),
            "DATE CHECK \u2713  Every story on this page happened, or was "
            "first reported, on Thursday 19 November 2026.",
            font=SANS_B(11), fill=INK)
     d.line([x0, y + 22, x1, y + 22], fill=LIGHT_LINE, width=1)
     ly = y + 27
-    lines = wrap("LEFT OUT \u2014 18 NOV: " + LEFT_OUT, SANS(8), cw - 16)
-    for ln in lines[:2]:
+    for ln in left_lines[:n_left]:
         d.text((x0 + 8, ly), ln, font=SANS(8), fill=INK)
         ly += 10
     d.text((x0 + 8, ly),
@@ -1317,7 +1328,7 @@ def draw():
            font=SANS(8), fill=INK)
 
     # footer sources
-    y = 984
+    y = y + box_h + 6
     fnt = SANSC(9)
     while fnt.getlength(FOOTER) > cw:
         fnt = SANSC(fnt.size - 1)
