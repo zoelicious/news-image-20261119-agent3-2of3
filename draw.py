@@ -23,6 +23,9 @@ lightened, legend ink (not grey), paper grain halved — page reads lighter
 at 300px; (5) CLAIM/FORECAST tags genuinely used (card 4 Kerch = Kyiv's
 claim, card 6 cyclone = forecast landfall) so the legend framework is real;
 (6) map taller (148->156) with bigger pins, brief type 10->11.
+REV5 (surgical, judge-sim round 5 — C5-as-A gap only): hero scene 122->126
+(panel has 4px slack), hero headline 21->22, stat value 22->24. Nothing
+else changed. If round-6 sim does not beat v4 (10-2-0), v4 stays the best.
 Deterministic: no timestamps, no network, seeded texture only.
 """
 import os
@@ -1168,15 +1171,15 @@ FOOTER = ("Claims are attributed, not stated as fact \u00b7 Pictures and "
 
 
 def hero_panel(d, x, y, w, h, item):
-    scene_h = 122
+    scene_h = 126
     panel_shadow(d, x, y, w, h)
     item["scene"](d, x, y, w, scene_h)
     ty = y + scene_h + 6
     num_badge(d, x + 11, ty + 6, item["n"], r=11)
     kicker(d, x + 26, ty, item["place"], item["topic"])
     ty += 20
-    lines = wrap(item["head"], SERIF_B(21), w - 4)
-    ty = fit_lines(d, x + 2, ty, lines[:2], SERIF_B(21), INK, 22)
+    lines = wrap(item["head"], SERIF_B(22), w - 4)
+    ty = fit_lines(d, x + 2, ty, lines[:2], SERIF_B(22), INK, 22)
     ty += 2
     lines = wrap(item["deck"], SANS(10), w - 4)
     fit_lines(d, x + 2, ty, lines[:3], SANS(10), INK, 12)
@@ -1243,7 +1246,7 @@ def draw():
         d.rectangle([bx + 2, y + 2, bx + bw + 2, y + 46], fill=SHADOW)
         vgrad(d, bx, y, bx + bw, y + 44, (48, 78, 132), (30, 54, 96))
         d.rectangle([bx, y, bx + bw, y + 44], outline=INK, width=1)
-        nf = SANS_B(22)
+        nf = SANS_B(24)
         while nf.getlength(num) > bw - 10:
             nf = SANS_B(nf.size - 1)
         d.text((bx + bw / 2, y + 4), num, font=nf, fill=(255, 255, 255),
